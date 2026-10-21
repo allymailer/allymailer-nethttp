@@ -1,10 +1,10 @@
-# AllyMailer Go net/http 1.0.0
+# AllyMailer Go net/http
 
-Web API 1.90
-
-Покроковий посібник: [Надсилання листів на Go](https://docs.allymailer.com.ua/ua/send-with-go) · Документація для LLM: [llms.txt](https://docs.allymailer.com.ua/llms.txt) · [Довідник API](https://docs.allymailer.com.ua/ua/web-api-ref)
+[![Go net/http](https://pkg.go.dev/badge/github.com/allymailer/allymailer-nethttp.svg)](https://pkg.go.dev/github.com/allymailer/allymailer-nethttp) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Інтеграція [Go SDK AllyMailer](https://github.com/allymailer/allymailer-go-sdk) (`github.com/allymailer/allymailer-go-sdk`) з Go net/http: клієнт API в request context (net/http middleware), ендпоінт вебхуків із перевіркою підпису.
+
+[Довідник API](https://docs.allymailer.com.ua/ua/web-api-ref) · Документація для LLM: [llms.txt](https://docs.allymailer.com.ua/llms.txt)
 
 ## Встановлення
 
@@ -14,22 +14,13 @@ go get github.com/allymailer/allymailer-nethttp
 
 Вимоги: Go 1.21+.
 
-## Отримайте API-ключ
+## Налаштування
 
-1. Зареєструйтеся на [cp.allymailer.com](https://cp.allymailer.com).
-2. Скопіюйте API-ключ у [панелі керування](https://cp.allymailer.com).
-3. Покладіть його у змінну оточення:
+Отримайте API-ключ у [панелі керування](https://cp.allymailer.com) і зберігайте його у змінній оточення, а не в коді:
 
 ```bash
 export ALLYMAILER_API_KEY="your-api-key"
 ```
-
-Пакет бере його з `ALLYMAILER_API_KEY` (див. налаштування нижче).
-
-> **Лише на сервері.** Використовуйте цей пакет у серверному коді: API-маршрути, серверні функції, воркери.
-> Ніколи не передавайте API-ключ у браузер чи мобільний застосунок і не комітьте його.
-
-## Налаштування
 
 За замовчуванням налаштування беруться зі змінних оточення:
 
@@ -47,149 +38,6 @@ ALLYMAILER_HOST=cp.allymailer.com
 | `WebhookPath` | `ALLYMAILER_WEBHOOK_PATH` | `/allymailer/webhook` | Шлях ендпоінта вебхуків. |
 
 `ConfigFromEnv()` читає змінні; `Config` можна заповнити і в коді. `ALLYMAILER_TIMEOUT` задається в секундах, `Config.Timeout` — `time.Duration`.
-
-## Перший лист — без налаштування DNS
-
-Кожен обліковий запис може одразу надсилати тестові листи із **sandbox-домену**: він уже підтверджений, DKIM і SPF налаштовані.
-Листи доставляються лише на підтверджені вами адреси.
-
-У прикладах — клієнт API з пакета (див. налаштування вище).
-
-**1. Отримайте sandbox-домен** (`domain/get-sandbox-domain`). Перший виклик створює домен, наступні повертають той самий.
-
-```go
-import (
-	"fmt"
-	"net/http"
-
-	allymailerwrapper "github.com/allymailer/allymailer-nethttp"
-)
-
-mux.HandleFunc("/sandbox-domain", func(w http.ResponseWriter, r *http.Request) {
-	client := allymailerwrapper.ClientFromContext(r.Context())
-	response, err := client.Domain.GetSandboxDomain(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	fmt.Fprintln(w, response.Domain)
-})
-```
-
-**2. Підтвердіть свою скриньку** (`confirmed-email/create`). AllyMailer надішле лист із підтвердженням; перейдіть за посиланням із нього протягом 48 годин.
-
-```go
-import (
-	"fmt"
-	"net/http"
-
-	"github.com/allymailer/allymailer-go-sdk/api/confirmedemail"
-	allymailerwrapper "github.com/allymailer/allymailer-nethttp"
-)
-
-mux.HandleFunc("/confirm-email", func(w http.ResponseWriter, r *http.Request) {
-	client := allymailerwrapper.ClientFromContext(r.Context())
-	response, err := client.ConfirmedEmail.Create(r.Context(), &confirmedemail.ConfirmedEmailRequest{
-		Email: "you@example.com",
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	fmt.Fprintln(w, response.Status)
-})
-```
-
-Статус перевірте через `confirmed-email/list` — у вашої адреси має бути `"status": "confirmed"`.
-
-**3. Надішліть лист** (`email/send`) з будь-якої адреси sandbox-домену на підтверджену адресу.
-
-```go
-import (
-	"fmt"
-	"net/http"
-
-	allymailer "github.com/allymailer/allymailer-go-sdk"
-	"github.com/allymailer/allymailer-go-sdk/api/email"
-	"github.com/allymailer/allymailer-go-sdk/common"
-	allymailerwrapper "github.com/allymailer/allymailer-nethttp"
-)
-
-mux.HandleFunc("/send", func(w http.ResponseWriter, r *http.Request) {
-	client := allymailerwrapper.ClientFromContext(r.Context())
-	response, err := client.Email.Send(r.Context(), &email.EmailSendRequest{
-		Message: &email.MessageObject{
-			Recipients: []email.MessageObjectRecipientsItem{
-				{
-					Email: "you@example.com",
-				},
-			},
-			Body: &common.BodyObject{
-				HTML: allymailer.String("<p>Працює!</p>"),
-			},
-			Subject:   "Привіт від AllyMailer",
-			FromEmail: allymailer.String("noreply@<sandbox-domain>"),
-		},
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	fmt.Fprintln(w, response.JobID)
-})
-```
-
-### Що повертається
-
-```json
-{
-  "status": "success",
-  "job_id": "1ZymBc-00041N-9X",
-  "emails": [
-    "you@example.com"
-  ]
-}
-```
-
-У разі помилки API повертає `status: "error"`, `message` і числовий `code`:
-
-```json
-{
-  "status": "error",
-  "code": 102,
-  "message": "Error ID:83274F98-C7D5-11F1-B221-6214FF8707B1. Can not decode key wrongkey"
-}
-```
-
-### Те саме через curl
-
-```bash
-BASE=https://cp.allymailer.com/ua/transactional/api/v1
-
-curl -s -X POST $BASE/domain/get-sandbox-domain.json \
-  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" -d '{}'
-
-curl -s -X POST $BASE/confirmed-email/create.json \
-  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" \
-  -d '{"email": "you@example.com"}'
-
-curl -s -X POST $BASE/email/send.json \
-  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" \
-  -d '{
-        "message": {
-          "recipients": [
-            {
-              "email": "you@example.com"
-            }
-          ],
-          "from_email": "noreply@<sandbox-domain>",
-          "subject": "Привіт від AllyMailer",
-          "body": {
-            "html": "<p>Працює!</p>"
-          }
-        }
-      }'
-```
 
 ## Вебхуки
 
@@ -221,6 +69,8 @@ e.Any(cfg.Path(), echo.WrapHandler(handler)) // echo
 
 Зареєструйте URL ендпоінта методом `webhook/set`, наприклад `https://example.com/allymailer/webhook`.
 
+> **Відповідайте 200 протягом 3 секунд**, а події обробляйте у фоні (через чергу): інакше AllyMailer повторює запит кожні 10 хвилин протягом доби (зростає `retry_count`), а обробник, на якому за добу не пройшов жоден запит хоча б для 10 подій, вимикається. Обробник має витримувати **щонайменше 5 паралельних запитів до 100 подій у кожному**; повтор надсилає ті самі події ще раз — прибирайте дублікати.
+
 ## Клієнт API
 
 Усі розділи API доступні через клієнт, див. [документацію SDK](https://github.com/allymailer/allymailer-go-sdk).
@@ -248,13 +98,12 @@ mux.HandleFunc("/usage", func(w http.ResponseWriter, r *http.Request) {
 http.ListenAndServe(":8080", allymailerwrapper.ClientMiddleware(client)(mux))
 ```
 
-## Надсилання через API
+### Надсилання через API
 
 Клієнт викликає [email/send](https://docs.allymailer.com.ua/ua/web-api-ref#email-send) з усіма його параметрами: шаблони, підстановки, метадані, трекінг. Поля запиту та інші приклади — у [документації Go SDK](https://github.com/allymailer/allymailer-go-sdk/blob/HEAD/docs/Email.md#send).
 
 ```go
 import (
-	"fmt"
 	"net/http"
 
 	allymailer "github.com/allymailer/allymailer-go-sdk"
@@ -264,36 +113,76 @@ import (
 )
 
 mux.HandleFunc("/send", func(w http.ResponseWriter, r *http.Request) {
-	client := allymailerwrapper.ClientFromContext(r.Context())
-	response, err := client.Email.Send(r.Context(), &email.EmailSendRequest{
+	ctx := r.Context()
+	client := allymailerwrapper.ClientFromContext(ctx)
+
+	if _, err := client.Email.Send(ctx, &email.EmailSendRequest{
 		Message: &email.MessageObject{
-			Recipients: []email.MessageObjectRecipientsItem{
-				{
-					Email: "user@example.com",
-					Substitutions: map[string]string{
-						"CustomerId": "12452",
-						"to_name":    "John Smith",
-					},
-				},
-			},
-			Body: &common.BodyObject{
-				HTML:      allymailer.String("<b>Hello, {{to_name}}</b>"),
-				Plaintext: allymailer.String("Hello, {{to_name}}"),
-			},
-			Subject:   "AllyMailer test email ",
-			FromEmail: allymailer.String("email@example.com"),
-			FromName:  allymailer.String("John Smith"),
+			Recipients: []email.MessageObjectRecipientsItem{email.RecipientFromAddress("Олексій <alex@example.com>")},
+			FromEmail:  allymailer.String("shop@example.com"),
+			FromName:   allymailer.String("Магазин"),
+			Subject:    "Ваше замовлення",
+			Body:       common.HTMLBody("<p>Вітаємо, {{to_name}}! Ваше замовлення надіслано.</p>"),
 		},
-	})
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+})
+```
+
+## Без свого домену: тестовий sandbox-домен
+
+Поки ваш домен не підтверджено, листи можна надсилати із **sandbox-домену** — тестового домену, який є в кожного облікового запису: він уже підтверджений, DKIM і SPF налаштовані. Листи з нього доставляються лише на підтверджені вами адреси (посилання для підтвердження приходить листом і діє 48 годин), до 100 на день. Через 31 день після створення sandbox-домен видаляється, але його можна отримати знову: наступний виклик `domain/get-sandbox-domain` створить новий (з іншою назвою, тому беріть її з відповіді, а не прописуйте в коді).
+
+У прикладах — клієнт API з пакета (див. налаштування вище).
+
+```go
+import (
+	"net/http"
+
+	allymailer "github.com/allymailer/allymailer-go-sdk"
+	"github.com/allymailer/allymailer-go-sdk/api/confirmedemail"
+	"github.com/allymailer/allymailer-go-sdk/api/email"
+	"github.com/allymailer/allymailer-go-sdk/common"
+	allymailerwrapper "github.com/allymailer/allymailer-nethttp"
+)
+
+mux.HandleFunc("/sandbox", func(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	client := allymailerwrapper.ClientFromContext(ctx)
+
+	// 1. Ваш sandbox-домен: створюється під час першого виклику, далі повертається той самий
+	sandbox, err := client.Domain.GetSandboxDomain(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	fmt.Fprintln(w, response.JobID)
+
+	// 2. Підтвердіть свою скриньку: AllyMailer надішле посилання, перейдіть за ним протягом 48 годин
+	confirm := &confirmedemail.ConfirmedEmailRequest{Email: "you@example.com"}
+	if _, err := client.ConfirmedEmail.Create(ctx, confirm); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	// 3. Надішліть із будь-якої адреси sandbox-домену на підтверджену адресу
+	if _, err := client.Email.Send(ctx, &email.EmailSendRequest{
+		Message: &email.MessageObject{
+			Recipients: []email.MessageObjectRecipientsItem{email.RecipientFromAddress("you@example.com")},
+			FromEmail:  allymailer.String("noreply@" + sandbox.Domain),
+			Subject:    "Привіт від AllyMailer",
+			Body:       common.HTMLBody("<p>Працює!</p>"),
+		},
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
 })
 ```
 
-## Обмеження sandbox
+<details>
+<summary>Обмеження sandbox</summary>
 
 - Надсилання лише на підтверджені адреси: до 10 на обліковий запис.
 - До 100 листів на день.
@@ -303,38 +192,67 @@ mux.HandleFunc("/send", func(w http.ResponseWriter, r *http.Request) {
 
 Sandbox — для розробки та тестування. Не використовуйте sandbox-домен як відправника на проді.
 
-## Перед продом: підтвердіть свій домен
+</details>
 
-1. `domain/get-dns-records` — повертає значення для DNS-записів.
-2. Додайте ці записи у свого DNS-провайдера (їх також показує сторінка домену в панелі керування):
+<details>
+<summary>Те саме через curl</summary>
 
-   | Тип | Хост | Значення |
-   |---|---|---|
-   | TXT | `@` | значення `verification-record` (`allymailer-validate-hash=…`) |
-   | TXT | `<селектор>._domainkey` (селектор — на сторінці домену в панелі керування, наприклад `us`) | `v=DKIM1; k=rsa; p=<dkim>` |
-   | TXT | `@` | `v=spf1 include:spf.allymailer.com ~all` |
-   | CNAME | `_dmarc` | значення `dmarc` |
+```bash
+BASE=https://cp.allymailer.com/ua/transactional/api/v1
 
-3. `domain/validate-verification-record`, потім `domain/validate-dkim`.
-4. `domain/list` — дочекайтеся, поки запис підтвердження буде підтверджено, а DKIM — активний.
-5. Беріть `from_email` з конфігурації, щоб перехід із sandbox не потребував змін у коді.
+curl -s -X POST $BASE/domain/get-sandbox-domain.json \
+  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" -d '{}'
 
-## Надійне надсилання
+curl -s -X POST $BASE/confirmed-email/create.json \
+  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" \
+  -d '{"email": "you@example.com"}'
 
-- **Повтори:** ставте `message.idempotence_key` у надсиланнях, які можуть повторюватися, щоб повторний запит не надіслав лист двічі.
-- **Ліміти:** до 500 отримувачів і 10 МБ на запит; кожне вкладення до 7 МБ.
-- **Тіло:** завжди передавайте `body.html` або `body.plaintext`.
-- **Статус доставки:** зареєструйте вебхук (`webhook/set`) зі швидким ідемпотентним HTTPS-обробником замість опитування.
-- **Типові налаштування:** не прибирайте стандартний блок відписки та трекінг; змінити їх можна через підтримку AllyMailer.
-- **Помилки:** повторюйте `429` і `5xx` з backoff; інші помилки без змін не повторюйте.
+curl -s -X POST $BASE/email/send.json \
+  -H "Content-Type: application/json" -H "X-API-KEY: $ALLYMAILER_API_KEY" \
+  -d '{
+        "message": {
+          "recipients": [
+            {
+              "email": "you@example.com"
+            }
+          ],
+          "from_email": "noreply@<sandbox-domain>",
+          "subject": "Привіт від AllyMailer",
+          "body": {
+            "html": "<p>Працює!</p>"
+          }
+        }
+      }'
+```
 
-## Посилання
+</details>
 
-- [Надсилання листів на Go](https://docs.allymailer.com.ua/ua/send-with-go) та інші [посібники з інтеграції](https://docs.allymailer.com.ua/ua/integrations/)
-- [Довідник Web API](https://docs.allymailer.com.ua/ua/web-api-ref)
-- [llms.txt](https://docs.allymailer.com.ua/llms.txt) для AI-асистентів
-- [Підтримка](https://cp.allymailer.com/ua/support)
+## Запуск у продакшен
 
-## Для розробників пакета
+**1. Підтвердіть домен надсилання.** `domain/get-dns-records` повертає запис підтвердження, DKIM-ключ і адресу для DMARC; додайте записи у свого DNS-провайдера, потім `domain/validate-verification-record` і `domain/validate-dkim`.
 
-Див. [AGENTS.md](AGENTS.md): як цей пакет генерується з OpenAPI-специфікації, збирається, перевіряється та випускається.
+| Тип | Хост | Значення | Звідки взяти |
+|---|---|---|---|
+| TXT | `@` | `allymailer-validate-hash=…` | поле `verification-record` відповіді, як є |
+| TXT | `<селектор>._domainkey` (селектор — на сторінці домену в панелі керування, наприклад `us`) | `v=DKIM1; k=rsa; p=<dkim>` | поле `dkim` відповіді після `v=DKIM1; k=rsa; p=` |
+| TXT | `@` | `v=spf1 include:spf.allymailer.com ~all` | у відповіді немає; якщо SPF-запис уже є, додайте include до нього |
+| CNAME | `_dmarc` | `<домен>.dmarc.…` | поле `dmarc` відповіді (DMARC-політику публікує AllyMailer); якщо в домену вже є свій TXT-запис DMARC, залиште його |
+
+**2. Надійне надсилання.**
+
+| | |
+|---|---|
+| Повтори | `429` і `5xx` з backoff і тим самим `idempotence_key`; інші помилки виправляйте, а не повторюйте |
+| Ліміти | 500 одержувачів і 10 МБ на запит разом із вкладеннями: у base64 файл стає приблизно на третину більшим |
+| Тіло | завжди `html` або `plaintext` (або із шаблону) |
+| Статус доставки | вебхук, а не опитування |
+| Черга | надсилайте з фонового завдання, а не всередині веб-запиту |
+| Налаштування | `from_email` з конфігурації: перехід із sandbox на продакшен без змін у коді |
+| Типові налаштування | не прибирайте блок відписки та трекінг; змінити їх можна через підтримку AllyMailer |
+
+## Допомога
+
+- [Go SDK](https://github.com/allymailer/allymailer-go-sdk)
+- Для ШІ-агентів: [llms.txt](https://docs.allymailer.com.ua/llms.txt), скіли: `npx skills add https://github.com/allymailer/allymailer-skills.git`
+- [Підтримка](https://cp.allymailer.com/ua/support) · [Задачі](https://github.com/allymailer/allymailer-nethttp/issues)
+- Розробникам: [AGENTS.md](AGENTS.md) — пакет генерується з OpenAPI-специфікації.
